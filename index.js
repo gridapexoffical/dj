@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { joinVoiceChannel } from '@discordjs/voice';
 import http from 'http';
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // HTTP szerver a Cloudflare Worker kéréseinek és a Render életben tartásához
 const server = http.createServer(async (req, res) => {
@@ -13,20 +13,22 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
             try {
+                console.log('📥 Beérkező kérés a Cloudflare-ről:', body);
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
                 const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
                 if (!guild) {
+                    console.log('❌ A bot nincs ezen a szerveren:', guildId);
                     res.writeHead(404);
                     return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
                 }
 
-                // Lekérdjük a tagot közvetlenül a Discord API-ból, hogy biztosan lássuk a hangstátuszát
                 const member = await guild.members.fetch(userId).catch(() => null);
                 const voiceChannel = member?.voice?.channel;
 
                 if (!voiceChannel) {
+                    console.log('❌ A felhasználó nincs hangcsatornában:', userId);
                     res.writeHead(200);
                     return res.end(JSON.stringify({ success: false, error: 'A felhasználó nincs hangcsatornában' }));
                 }
@@ -38,10 +40,11 @@ const server = http.createServer(async (req, res) => {
                     adapterCreator: guild.voiceAdapterCreator,
                 });
 
+                console.log(`🔊 Sikeres csatlakozás ide: ${voiceChannel.name}`);
                 res.writeHead(200);
                 res.end(JSON.stringify({ success: true, channelName: voiceChannel.name }));
             } catch (err) {
-                console.error('Hiba a /join-voice végponton:', err);
+                console.error('🔥 Hiba a /join-voice végponton:', err);
                 res.writeHead(500);
                 res.end(JSON.stringify({ success: false, error: 'Szerverhiba' }));
             }
