@@ -4,11 +4,12 @@ import http from 'http';
 
 const PORT = process.env.PORT || 10000;
 
-// A Discord kliens inicializálása a szükséges intentekkel
+// A Discord kliens inicializálása a szükséges intentekkel (beleértve a GuildMembers-t is)
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -32,8 +33,15 @@ const server = http.createServer(async (req, res) => {
             try {
                 console.log('📥 Beérkező kérés a Cloudflare-ről:', body);
 
+                // Ha a bot még nem készült el, várunk maximum 5 másodpercet
+                let attempts = 0;
+                while (!isReady && attempts < 10) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    attempts++;
+                }
+
                 if (!isReady) {
-                    console.log('❌ A bot még nem jelentkezett be a Discordra.');
+                    console.log('❌ A bot nem tudott bejelentkezni a Discordra időben.');
                     res.writeHead(503);
                     return res.end(JSON.stringify({ success: false, error: 'A bot még töltődik' }));
                 }
