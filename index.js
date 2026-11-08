@@ -16,7 +16,7 @@ let isReady = false;
 
 client.once('ready', () => {
     isReady = true;
-    console.log(`Bejelentkezve mint ${client.user.tag}! A bot készen áll.`);
+    console.log(`Bejelentkezve mint ${client.user.tag}! A bot készen áll. Elérhető guild-ek száma: ${client.guilds.cache.size}`);
 });
 
 client.login(process.env.DISCORD_TOKEN);
@@ -33,29 +33,38 @@ const server = http.createServer(async (req, res) => {
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
-                console.log('1️⃣ Próbálom lekérni a guildet...');
-                const guild = await client.guilds.fetch(guildId).catch(err => {
-                    console.log('❌ Hiba a guild fetch-elésekor:', err);
-                    return null;
-                });
+                console.log('1️⃣ Guild keresése a cache-ben...');
+                let guild = client.guilds.cache.get(guildId);
+                
+                if (!guild) {
+                    console.log('⚠️ Nincs benne a cache-ben, próbálom fetch-elni timeout-tal...');
+                    try {
+                        guild = await Promise.race([
+                            client.guilds.fetch(guildId),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                        ]);
+                    } catch (err) {
+                        console.log('❌ Hiba vagy időtúllépés a guild lekérésekor:', err.message);
+                    }
+                }
 
                 if (!guild) {
                     console.log('❌ Nem találtam a guildet!');
                     res.writeHead(404);
-                    return res.end(JSON.stringify({ success: false }));
+                    return res.end(JSON.stringify({ success: false, error: 'Guild nem található' }));
                 }
                 console.log('✅ Guild megvan:', guild.name);
 
-                console.log('2️⃣ Próbálom lekérni a taget (felhasználót)...');
+                console.log('2️⃣ Tag (member) lekérése...');
                 const member = await guild.members.fetch(userId).catch(err => {
-                    console.log('❌ Hiba a tag (member) fetch-elésekor (Server Members Intent hiányzik?):', err);
+                    console.log('❌ Hiba a tag fetch-elésekor:', err.message);
                     return null;
                 });
 
                 if (!member) {
                     console.log('❌ Nem találtam a taget a szerveren!');
                     res.writeHead(200);
-                    return res.end(JSON.stringify({ success: false }));
+                    return res.end(JSON.stringify({ success: false, error: 'Tag nem található' }));
                 }
                 console.log('✅ Tag megvan:', member.user.tag);
 
@@ -63,7 +72,7 @@ const server = http.createServer(async (req, res) => {
                 if (!voiceChannel) {
                     console.log('❌ A felhasználó nincs hangcsatornában!');
                     res.writeHead(200);
-                    return res.end(JSON.stringify({ success: false }));
+                    return res.end(JSON.stringify({ success: false, error: 'Nincs hangcsatornában' }));
                 }
                 console.log('✅ Hangcsatorna megvan:', voiceChannel.name);
 
