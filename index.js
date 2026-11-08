@@ -1,10 +1,20 @@
-if (req.method === 'POST' && req.url === '/join-voice') {
+import { Client, GatewayIntentBits } from 'discord.js';
+import { joinVoiceChannel } from '@discordjs/voice';
+import http from 'http';
+
+const PORT = process.env.PORT || 3000;
+
+// HTTP szerver a Cloudflare Worker kéréseinek és a Render életben tartásához
+const server = http.createServer(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+
+    if (req.method === 'POST' && req.url === '/join-voice') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
             try {
                 const data = JSON.parse(body);
-                const { guildId, userId } = data; // Mostantól a userId-t küldjük
+                const { guildId, userId } = data;
 
                 const guild = client.guilds.cache.get(guildId);
                 if (!guild) {
@@ -12,16 +22,16 @@ if (req.method === 'POST' && req.url === '/join-voice') {
                     return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
                 }
 
-                // Megkeressük a felhasználót a szerver hangcsatornáiban
+                // Megkeressük a felhasználót a szerveren és a hangcsatornájában
                 const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
                 const voiceChannel = member?.voice?.channel;
 
                 if (!voiceChannel) {
-                    res.writeHead(400);
+                    res.writeHead(200);
                     return res.end(JSON.stringify({ success: false, error: 'A felhasználó nincs hangcsatornában' }));
                 }
 
-                // Csatlakozás
+                // Csatlakozás a hangcsatornához
                 joinVoiceChannel({
                     channelId: voiceChannel.id,
                     guildId: guild.id,
@@ -31,9 +41,31 @@ if (req.method === 'POST' && req.url === '/join-voice') {
                 res.writeHead(200);
                 res.end(JSON.stringify({ success: true, channelName: voiceChannel.name }));
             } catch (err) {
-                console.error(err);
+                console.error('Hiba a /join-voice végponton:', err);
                 res.writeHead(500);
                 res.end(JSON.stringify({ success: false, error: 'Szerverhiba' }));
             }
         });
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('A Render háttérbot aktív!\n');
     }
+});
+
+server.listen(PORT, () => {
+    console.log(`HTTP szerver fut a ${PORT}-es porton.`);
+});
+
+// A Discord kliens inicializálása a szükséges intentekkel
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates
+    ]
+});
+
+client.once('ready', () => {
+    console.log(`Bejelentkezve mint ${client.user.tag}!`);
+});
+
+client.login(process.env.DISCORD_TOKEN);
