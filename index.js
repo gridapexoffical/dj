@@ -4,6 +4,7 @@ const play = require('play-dl');
 const http = require('http');
 
 const PORT = process.env.PORT || 3000;
+const GUILD_ID = '1531628276156469348'; 
 
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -23,7 +24,6 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`Bejelentkezve mint ${client.user.tag}!`);
 
-    // Slash parancs regisztrálása globálisan
     const commands = [
         new SlashCommandBuilder()
             .setName('start')
@@ -37,12 +37,12 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
     try {
-        console.log('Slash parancsok frissítése...');
+        console.log('Szerver-specifikus parancs regisztrálása...');
         await rest.put(
-            Routes.applicationCommands(client.user.id),
+            Routes.applicationGuildCommands(client.user.id, GUILD_ID),
             { body: commands },
         );
-        console.log('Slash parancsok sikeresen regisztrálva!');
+        console.log('Parancs sikeresen regisztrálva a szerveren!');
     } catch (error) {
         console.error(error);
     }
