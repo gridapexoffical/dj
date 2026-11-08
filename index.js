@@ -4,7 +4,7 @@ import http from 'http';
 
 const PORT = process.env.PORT || 10000;
 
-// A Discord kliens inicializálása a szükséges intentekkel (beleértve a GuildMembers-t is)
+// A Discord kliens inicializálása a szükséges intentekkel
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -33,7 +33,6 @@ const server = http.createServer(async (req, res) => {
             try {
                 console.log('📥 Beérkező kérés a Cloudflare-ről:', body);
 
-                // Ha a bot még nem készült el, várunk maximum 5 másodpercet
                 let attempts = 0;
                 while (!isReady && attempts < 10) {
                     await new Promise(resolve => setTimeout(resolve, 500));
@@ -41,7 +40,7 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 if (!isReady) {
-                    console.log('❌ A bot nem tudott bejelentkezni a Discordra időben.');
+                    console.log('❌ Hiba: A bot nem készült el időben.');
                     res.writeHead(503);
                     return res.end(JSON.stringify({ success: false, error: 'A bot még töltődik' }));
                 }
@@ -49,34 +48,44 @@ const server = http.createServer(async (req, res) => {
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
-                const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+                console.log(`🔍 Guild keresése: ${guildId}`);
+                const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(err => {
+                    console.error('🔥 Hiba a guild fetch közben:', err);
+                    return null;
+                });
+
                 if (!guild) {
-                    console.log('❌ A bot nincs ezen a szerveren:', guildId);
+                    console.log('❌ Hiba: A bot nincs ezen a szerveren vagy nem érhető el:', guildId);
                     res.writeHead(404);
                     return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
                 }
 
-                const member = await guild.members.fetch(userId).catch(() => null);
+                console.log(`🔍 Tag keresése: ${userId}`);
+                const member = await guild.members.fetch(userId).catch(err => {
+                    console.error('🔥 Hiba a member fetch közben (lehet hiányzik a Server Members Intent!):', err);
+                    return null;
+                });
+
                 const voiceChannel = member?.voice?.channel;
 
                 if (!voiceChannel) {
-                    console.log('❌ A felhasználó nincs hangcsatornában:', userId);
+                    console.log('❌ Hiba: A felhasználó nincs hangcsatornában, vagy a bot nem látja a hangstátuszt!');
                     res.writeHead(200);
                     return res.end(JSON.stringify({ success: false, error: 'A felhasználó nincs hangcsatornában' }));
                 }
 
-                // Csatlakozás a hangcsatornához
+                console.log(`🔊 Csatlakozás a csatornához: ${voiceChannel.name} (${voiceChannel.id})`);
                 joinVoiceChannel({
                     channelId: voiceChannel.id,
                     guildId: guild.id,
                     adapterCreator: guild.voiceAdapterCreator,
                 });
 
-                console.log(`🔊 Sikeres csatlakozás ide: ${voiceChannel.name}`);
+                console.log(`✅ Sikeres csatlakozás!`);
                 res.writeHead(200);
                 res.end(JSON.stringify({ success: true, channelName: voiceChannel.name }));
             } catch (err) {
-                console.error('🔥 Hiba a /join-voice végponton:', err);
+                console.error('🔥 Részletes hiba a /join-voice végponton:', err);
                 res.writeHead(500);
                 res.end(JSON.stringify({ success: false, error: 'Szerverhiba' }));
             }
