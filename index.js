@@ -1,86 +1,63 @@
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import { joinVoiceChannel } from '@discordjs/voice';
 import http from 'http';
 
 const PORT = process.env.PORT || 3000;
-const GUILD_ID = '1531628276156469348'; // A te szervered ID-je
 
-// HTTP szerver a Rendernek, hogy ne aludjon el
-http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('A zenebot aktív és fut!\n');
-}).listen(PORT, () => {
+// HTTP szerver, ami egyrészt életben tartja a Rendert, másrészt fogadja a Cloudflare kérését a csatlakozáshoz
+const server = http.createServer(async (req, res) => {
+    // CORS és JSON beállítások
+    res.setHeader('Content-Type', 'application/json');
+
+    if (req.method === 'POST' && req.url === '/join-voice') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { guildId, channelId } = data;
+
+                const guild = client.guilds.cache.get(guildId);
+                if (!guild) {
+                    res.writeHead(404);
+                    return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
+                }
+
+                // Csatlakozás a hangcsatornához a bot segítségével
+                joinVoiceChannel({
+                    channelId: channelId,
+                    guildId: guild.id,
+                    adapterCreator: guild.voiceAdapterCreator,
+                });
+
+                res.writeHead(200);
+                res.end(JSON.stringify({ success: true, message: 'Sikeres csatlakozás!' }));
+            } catch (err) {
+                console.error(err);
+                res.writeHead(500);
+                res.end(JSON.stringify({ success: false, error: 'Szerverhiba a csatlakozáskor' }));
+            }
+        });
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('A Render háttérbot aktív!\n');
+    }
+});
+
+server.listen(PORT, () => {
     console.log(`HTTP szerver fut a ${PORT}-es porton.`);
 });
 
-// A bot kliens inicializálása a szükséges jogosultságokkal (Intents + Voice State)
+// A Discord kliens inicializálása
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates // Ez KELL ahhoz, hogy lássa a hangcsatornákat és csatlakozni tudjon!
+        GatewayIntentBits.GuildVoiceStates
     ]
 });
 
-client.once('ready', async () => {
+client.once('ready', () => {
     console.log(`Bejelentkezve mint ${client.user.tag}!`);
-
-    // Itt regisztráljuk mindkét parancsot közvetlenül
-    const commands = [
-        new SlashCommandBuilder()
-            .setName('ping')
-            .setDescription('Válaszol egy Pong!-gal!'),
-        new SlashCommandBuilder()
-            .setName('join')
-            .setDescription('Csatlakozik ahhoz a hangcsatornához, amiben benne vagy!')
-    ].map(command => command.toJSON());
-
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
-    try {
-        console.log('Parancsok regisztrálása a szerverre...');
-        await rest.put(
-            Routes.applicationGuildCommands(client.user.id, GUILD_ID),
-            { body: commands },
-        );
-        console.log('A parancsok sikeresen regisztrálva lettek!');
-    } catch (error) {
-        console.error('Hiba a regisztrációkor:', error);
-    }
-});
-
-// Eseménykezelő a parancsokhoz
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    // 1. /ping parancs kezelése
-    if (interaction.commandName === 'ping') {
-        await interaction.reply('Pong! 🏓');
-    }
-
-    // 2. /join parancs kezelése
-    if (interaction.commandName === 'join') {
-        const voiceChannel = interaction.member.voice.channel;
-
-        if (!voiceChannel) {
-            return await interaction.reply({ 
-                content: '❌ Előbb be kell lépned egy hangcsatornába, hogy csatlakozni tudjak!', 
-                ephemeral: true 
-            });
-        }
-
-        try {
-            joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId: interaction.guild.id,
-                adapterCreator: interaction.guild.voiceAdapterCreator,
-            });
-
-            await interaction.reply(`🔊 Sikeresen csatlakoztam ide: **${voiceChannel.name}**!`);
-        } catch (error) {
-            console.error(error);
-            await interaction.reply({ content: '❌ Hiba történt a hangcsatornához való csatlakozás közben.', ephemeral: true });
-        }
-    }
 });
 
 client.login(process.env.DISCORD_TOKEN);
