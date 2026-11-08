@@ -4,6 +4,23 @@ import http from 'http';
 
 const PORT = process.env.PORT || 10000;
 
+// A Discord kliens inicializálása a szükséges intentekkel
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates
+    ]
+});
+
+let isReady = false;
+
+client.once('ready', () => {
+    isReady = true;
+    console.log(`Bejelentkezve mint ${client.user.tag}! A bot készen áll.`);
+});
+
+client.login(process.env.DISCORD_TOKEN);
+
 // HTTP szerver a Cloudflare Worker kéréseinek és a Render életben tartásához
 const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
@@ -14,6 +31,13 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 console.log('📥 Beérkező kérés a Cloudflare-ről:', body);
+
+                if (!isReady) {
+                    console.log('❌ A bot még nem jelentkezett be a Discordra.');
+                    res.writeHead(503);
+                    return res.end(JSON.stringify({ success: false, error: 'A bot még töltődik' }));
+                }
+
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
@@ -58,17 +82,3 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
     console.log(`HTTP szerver fut a ${PORT}-es porton.`);
 });
-
-// A Discord kliens inicializálása a szükséges intentekkel
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates
-    ]
-});
-
-client.once('ready', () => {
-    console.log(`Bejelentkezve mint ${client.user.tag}!`);
-});
-
-client.login(process.env.DISCORD_TOKEN);
