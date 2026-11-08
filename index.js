@@ -77,10 +77,10 @@ const server = http.createServer(async (req, res) => {
                 res.writeHead(200);
                 res.end(JSON.stringify({ success: true, channelName: voiceChannel.name }));
 
-            } `catch` (err) {
+            } catch (err) {
                 console.error('🔥 Kritikus hiba:', err);
                 res.writeHead(500);
-                res.end(JSON.stringify({ success: false }));
+                return res.end(JSON.stringify({ success: false }));
             }
         });
     } else {
