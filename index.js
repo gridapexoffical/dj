@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
-import { joinVoiceChannel, getVoiceConnection } from '@discordjs/voice';
+import { joinVoiceChannel } from '@discordjs/voice';
 import http from 'http';
 
 const PORT = process.env.PORT || 3000;
@@ -24,12 +24,14 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`Bejelentkezve mint ${client.user.tag}!`);
 
-    // Regisztráljuk a /ping és a /join parancsokat
+    // Itt regisztráljuk mindkét parancsot közvetlenül
     const commands = [
         new SlashCommandBuilder()
             .setName('ping')
             .setDescription('Válaszol egy Pong!-gal!'),
-        newSlashCommandWithChannel()
+        new SlashCommandBuilder()
+            .setName('join')
+            .setDescription('Csatlakozik ahhoz a hangcsatornához, amiben benne vagy!')
     ].map(command => command.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -46,13 +48,7 @@ client.once('ready', async () => {
     }
 });
 
-// Segédfüggvény a /join parancs felépítéséhez, amely megköveteli egy hangcsatorna kiválasztását
-function newSlashCommandWithChannel() {
-    return new SlashCommandBuilder()
-        .setName('join')
-        .setDescription('Csatlakozik ahhoz a hangcsatornához, amiben benne vagy!');
-}
-
+// Eseménykezelő a parancsokhoz
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -63,7 +59,6 @@ client.on('interactionCreate', async interaction => {
 
     // 2. /join parancs kezelése
     if (interaction.commandName === 'join') {
-        // Megnézzük, hogy a felhasználó, aki írta a parancsot, benne van-e egyáltalán valamilyen hangcsatornában
         const voiceChannel = interaction.member.voice.channel;
 
         if (!voiceChannel) {
@@ -74,8 +69,7 @@ client.on('interactionCreate', async interaction => {
         }
 
         try {
-            // Csatlakozás a hangcsatornához
-            const connection = joinVoiceChannel({
+            joinVoiceChannel({
                 channelId: voiceChannel.id,
                 guildId: interaction.guild.id,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
