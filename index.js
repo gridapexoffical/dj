@@ -4,7 +4,6 @@ import http from 'http';
 
 const PORT = process.env.PORT || 10000;
 
-// A Discord kliens inicializálása a szükséges intentekkel
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -22,7 +21,6 @@ client.once('ready', () => {
 
 client.login(process.env.DISCORD_TOKEN);
 
-// HTTP szerver a Cloudflare Worker kéréseinek és a Render életben tartásához
 const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
 
@@ -32,62 +30,57 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 console.log('📥 Beérkező kérés a Cloudflare-ről:', body);
-
-                let attempts = 0;
-                while (!isReady && attempts < 10) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    attempts++;
-                }
-
-                if (!isReady) {
-                    console.log('❌ Hiba: A bot nem készült el időben.');
-                    res.writeHead(503);
-                    return res.end(JSON.stringify({ success: false, error: 'A bot még töltődik' }));
-                }
-
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
-                console.log(`🔍 Guild keresése: ${guildId}`);
-                const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(err => {
-                    console.error('🔥 Hiba a guild fetch közben:', err);
+                console.log('1️⃣ Próbálom lekérni a guildet...');
+                const guild = await client.guilds.fetch(guildId).catch(err => {
+                    console.log('❌ Hiba a guild fetch-elésekor:', err);
                     return null;
                 });
 
                 if (!guild) {
-                    console.log('❌ Hiba: A bot nincs ezen a szerveren vagy nem érhető el:', guildId);
+                    console.log('❌ Nem találtam a guildet!');
                     res.writeHead(404);
-                    return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
+                    return res.end(JSON.stringify({ success: false }));
                 }
+                console.log('✅ Guild megvan:', guild.name);
 
-                console.log(`🔍 Tag keresése: ${userId}`);
+                console.log('2️⃣ Próbálom lekérni a taget (felhasználót)...');
                 const member = await guild.members.fetch(userId).catch(err => {
-                    console.error('🔥 Hiba a member fetch közben (lehet hiányzik a Server Members Intent!):', err);
+                    console.log('❌ Hiba a tag (member) fetch-elésekor (Server Members Intent hiányzik?):', err);
                     return null;
                 });
 
-                const voiceChannel = member?.voice?.channel;
-
-                if (!voiceChannel) {
-                    console.log('❌ Hiba: A felhasználó nincs hangcsatornában, vagy a bot nem látja a hangstátuszt!');
+                if (!member) {
+                    console.log('❌ Nem találtam a taget a szerveren!');
                     res.writeHead(200);
-                    return res.end(JSON.stringify({ success: false, error: 'A felhasználó nincs hangcsatornában' }));
+                    return res.end(JSON.stringify({ success: false }));
                 }
+                console.log('✅ Tag megvan:', member.user.tag);
 
-                console.log(`🔊 Csatlakozás a csatornához: ${voiceChannel.name} (${voiceChannel.id})`);
+                const voiceChannel = member?.voice?.channel;
+                if (!voiceChannel) {
+                    console.log('❌ A felhasználó nincs hangcsatornában!');
+                    res.writeHead(200);
+                    return res.end(JSON.stringify({ success: false }));
+                }
+                console.log('✅ Hangcsatorna megvan:', voiceChannel.name);
+
                 joinVoiceChannel({
                     channelId: voiceChannel.id,
                     guildId: guild.id,
                     adapterCreator: guild.voiceAdapterCreator,
                 });
 
-                console.log(`✅ Sikeres csatlakozás!`);
+                console.log('🎉 Sikeres hangcsatorna csatlakozás!');
                 res.writeHead(200);
                 res.end(JSON.stringify({ success: true, channelName: voiceChannel.name }));
-            } catch (err) {
-                console.error('🔥 Részletes hiba a /join-voice végponton:', err);
+
+            } `catch` (err) {
+                console.error('🔥 Kritikus hiba:', err);
                 res.writeHead(500);
-                res.end(JSON.stringify({ success: false, error: 'Szerverhiba' }));
+                res.end(JSON.stringify({ success: false }));
             }
         });
     } else {
