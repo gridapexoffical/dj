@@ -16,14 +16,14 @@ const server = http.createServer(async (req, res) => {
                 const data = JSON.parse(body);
                 const { guildId, userId } = data;
 
-                const guild = client.guilds.cache.get(guildId);
+                const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
                 if (!guild) {
                     res.writeHead(404);
                     return res.end(JSON.stringify({ success: false, error: 'A bot nincs ezen a szerveren' }));
                 }
 
-                // Megkeressük a felhasználót a szerveren és a hangcsatornájában
-                const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+                // Lekérdjük a tagot közvetlenül a Discord API-ból, hogy biztosan lássuk a hangstátuszát
+                const member = await guild.members.fetch(userId).catch(() => null);
                 const voiceChannel = member?.voice?.channel;
 
                 if (!voiceChannel) {
